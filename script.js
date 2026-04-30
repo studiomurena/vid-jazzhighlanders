@@ -8,7 +8,7 @@ const config = {
 const game = new Phaser.Game(config);
 
 // Variabili globali
-let cielo, skyline, pavimento;
+let cielo, skyline, rovine, pavimento;
 let furga;
 let pali = [], ostacoli = [], nemiciSprites = [];
 let bandSprites = {}; 
@@ -17,15 +17,17 @@ let faseVideo = 0;
 
 const membri = ['carma', 'ferraz', 'mauri', 'nan', 'falcon'];
 const cattivi = ['copzombie', 'drogato']; 
-const animazioni = ['idle', 'attack', 'walk', 'jump']; 
+// Aggiunta animazione 'hurt' (solo per i buoni, ma il codice scarterà i cattivi senza crashare)
+const animazioni = ['idle', 'attack', 'walk', 'jump', 'hurt']; 
 
 function preload() {
     this.load.image('cielo', 'assets/cielo.png');
     this.load.image('skyline', 'assets/skyline.png');
+    this.load.image('rovine', 'assets/rovine.png'); // Aggiunto per la Fase 3!
     this.load.image('pavimento', 'assets/pavimento.png');
     this.load.image('palo1', 'assets/palo1.png');
     this.load.image('palo2', 'assets/palo2.png');
-    this.load.image('gommoni', 'assets/gommoni.png'); // Aggiunti i gommoni!
+    this.load.image('gommoni', 'assets/gommoni.png'); 
 
     this.load.spritesheet('furga_run', 'assets/furga-run.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
     this.load.spritesheet('barili_animati', 'assets/barili.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
@@ -40,16 +42,25 @@ function preload() {
 }
 
 function create() {
-    // --- 1. SFONDI ---
+    // --- 1. SFONDI A TUTTO SCHERMO ---
+    // Usiamo tileScaleY = 2 per "stirare" l'altezza degli sfondi senza farli ripetere in verticale
+    
+    // FASE 1: Solo Cielo e Pavimento
     cielo = this.add.tileSprite(960, 540, 1920, 1080, 'cielo').setDepth(0);
     
-    // FIX SKYLINE: Altezza esatta 540, posizionata in modo che la base tocchi esattamente l'inizio del pavimento (Y=780).
-    // In questo modo non si sdoppia e non lascia buchi neri!
-    skyline = this.add.tileSprite(960, 510, 1920, 540, 'skyline').setDepth(1).setVisible(false);
-    
+    // FASE 2: Solo Skyline e Pavimento (Invisibile all'inizio)
+    skyline = this.add.tileSprite(960, 540, 1920, 1080, 'skyline').setDepth(0).setVisible(false);
+    skyline.tileScaleY = 2; // Riempe bene lo schermo dietro al pavimento
+    skyline.tileScaleX = 2; 
+
+    // FASE 3: Solo Rovine e Pavimento (Invisibile all'inizio)
+    rovine = this.add.tileSprite(960, 540, 1920, 1080, 'rovine').setDepth(0).setVisible(false);
+    rovine.tileScaleY = 2;
+    rovine.tileScaleX = 2;
+
     pavimento = this.add.tileSprite(960, 930, 1920, 300, 'pavimento').setDepth(2);
 
-    // --- 2. ANIMAZIONI ---
+    // --- 2. CREAZIONE ANIMAZIONI ---
     this.anims.create({
         key: 'furga_corsa',
         frames: this.anims.generateFrameNumbers('furga_run', { start: 0, end: 24 }),
@@ -68,7 +79,8 @@ function create() {
                 this.anims.create({
                     key: `${char}_${anim}_anim`,
                     frames: this.anims.generateFrameNumbers(`${char}_${anim}`, { start: 0, end: 24 }),
-                    frameRate: 12, repeat: -1
+                    frameRate: 15, // Rese un po' più fluide e veloci
+                    repeat: -1
                 });
             }
         });
@@ -80,8 +92,8 @@ function create() {
 
     furga = this.add.sprite(960, 700, 'furga_run').setDepth(3).setScale(3.5).play('furga_corsa');
 
-    // LA BAND: Li spargiamo bene sulla parte sinistra/centro dello schermo
-    let posizioniBandX = { 'carma': 400, 'ferraz': 650, 'mauri': 900, 'nan': 1150, 'falcon': 1400 };
+    // LA BAND (Disposti a sinistra)
+    let posizioniBandX = { 'carma': 350, 'ferraz': 600, 'mauri': 850, 'nan': 1100, 'falcon': 1350 };
     membri.forEach(m => {
         bandSprites[m] = this.add.sprite(posizioniBandX[m], 780, `${m}_walk`)
             .setDepth(4)
@@ -89,15 +101,14 @@ function create() {
             .setVisible(false);
     });
 
-    // SCENOGRAFIA: Barili e Gommoni sparsi (Fuori schermo a destra)
+    // SCENOGRAFIA: Piccoli sparsi ovunque
     let configOstacoli = [
         { x: 2100, y: 770, type: 'barili_animati' },
-        { x: 2400, y: 820, type: 'gommoni' },
-        { x: 2600, y: 790, type: 'barili_animati' },
-        { x: 2900, y: 830, type: 'gommoni' },
-        { x: 3100, y: 780, type: 'barili_animati' }
+        { x: 2300, y: 840, type: 'gommoni' },
+        { x: 2500, y: 790, type: 'barili_animati' },
+        { x: 2800, y: 850, type: 'gommoni' },
+        { x: 3000, y: 780, type: 'barili_animati' }
     ];
-    
     configOstacoli.forEach(ost => {
         let elemento;
         if(ost.type === 'barili_animati') {
@@ -108,36 +119,39 @@ function create() {
         ostacoli.push(elemento);
     });
 
-    // I NEMICI: Il copione degli accoppiamenti
-    // Diciamo a ogni nemico contro chi deve andare a sbattere (targetX)
+    // I NEMICI: Chi attacca chi!
     let copioneNemici = [
-        { tipo: 'copzombie', targetX: 500, y: 770 },  // Contro Carma
-        { tipo: 'copzombie', targetX: 550, y: 810 },  // Contro Carma (sono in 2!)
-        { tipo: 'drogato',   targetX: 750, y: 790 },  // Contro Ferraz
-        { tipo: 'drogato',   targetX: 1000, y: 780 }, // Contro Mauri
-        { tipo: 'copzombie', targetX: 1250, y: 800 }, // Contro Nan
-        { tipo: 'drogato',   targetX: 1500, y: 790 }  // Contro Falcon
+        { tipo: 'copzombie', targetX: 450,  bersaglio: 'carma',  y: 770 }, // Zombie 1 su Carma
+        { tipo: 'copzombie', targetX: 500,  bersaglio: 'carma',  y: 810 }, // Zombie 2 su Carma
+        { tipo: 'drogato',   targetX: 700,  bersaglio: 'ferraz', y: 790 }, // Drogato su Ferraz
+        { tipo: 'drogato',   targetX: 950,  bersaglio: 'mauri',  y: 780 }, // Drogato su Mauri
+        { tipo: 'copzombie', targetX: 1200, bersaglio: 'nan',    y: 800 }, // Zombie su Nan
+        { tipo: 'drogato',   targetX: 1450, bersaglio: 'falcon', y: 790 }  // Drogato su Falcon
     ];
 
     copioneNemici.forEach((n, i) => {
         let nemico = this.add.sprite(2500 + (i * 200), n.y, `${n.tipo}_walk`)
             .setDepth(4)
             .setScale(1.5)
-            .setFlipX(true); // FONDAMENTALE: Li gira verso sinistra (verso lo Studio Murena)
+            .setFlipX(true); 
             
         if (this.anims.exists(`${n.tipo}_walk_anim`)) nemico.play(`${n.tipo}_walk_anim`);
         
-        nemico.targetX = n.targetX; // Salviamo dove deve fermarsi
+        nemico.targetX = n.targetX; 
+        nemico.bersaglioNome = n.bersaglio; // Si ricorda chi deve picchiare!
         nemiciSprites.push(nemico);
     });
 
     // --- LA REGIA DEI TEMPI ---
 
+    // FASE 2: Dalla Furga a piedi
     this.time.delayedCall(20000, () => {
         faseVideo = 1; 
-        skyline.setVisible(true);
+        
+        cielo.setVisible(false); // Via il cielo
+        skyline.setVisible(true); // Dentro lo skyline enorme
+        
         pali.forEach(p => p.setVisible(false));
-
         this.tweens.add({ targets: furga, x: -1000, duration: 4000, ease: 'Power2' });
 
         membri.forEach(m => {
@@ -148,14 +162,16 @@ function create() {
         });
     });
 
+    // FASE 3: Combattimento tra le Rovine
     this.time.delayedCall(45000, () => {
         faseVideo = 2; 
-        membri.forEach(m => bandSprites[m].play(`${m}_idle_anim`));
 
-        // Facciamo scivolare la scenografia in campo
+        skyline.setVisible(false); // Via lo skyline
+        rovine.setVisible(true);   // Dentro le rovine enormi
+
+        membri.forEach(m => bandSprites[m].play(`${m}_idle_anim`));
         this.tweens.add({ targets: ostacoli, x: '-=1200', duration: 3000, ease: 'Power2' });
 
-        // Facciamo correre ogni nemico alla sua posizione (targetX) per fare i 1v1
         nemiciSprites.forEach(nemico => {
             this.tweens.add({
                 targets: nemico,
@@ -169,7 +185,6 @@ function create() {
             });
         });
 
-        // Dopo 3 secondi, quando sono tutti in posizione, inizia la rissa loop
         this.time.delayedCall(3000, () => {
             iniziaRissa(this);
         });
@@ -177,13 +192,45 @@ function create() {
 }
 
 function iniziaRissa(scene) {
+    // Il loop è più veloce! 1000 millisecondi invece di 2000
     scene.time.addEvent({
-        delay: 2000,
+        delay: 1000,
         callback: () => {
+            // I nemici decidono se attaccare (50% probabilità)
+            nemiciSprites.forEach(nemico => {
+                let nomeNemico = nemico.texture.key.split('_')[0];
+                
+                if (Math.random() > 0.5) {
+                    // Il nemico attacca!
+                    nemico.play(`${nomeNemico}_attack_anim`);
+                    
+                    // Il membro bersagliato si fa male!
+                    let bersaglio = bandSprites[nemico.bersaglioNome];
+                    
+                    // Suona l'animazione HURT e poi torna in IDLE
+                    if (scene.anims.exists(`${nemico.bersaglioNome}_hurt_anim`)) {
+                        bersaglio.play(`${nemico.bersaglioNome}_hurt_anim`).once('animationcomplete', () => {
+                            bersaglio.play(`${nemico.bersaglioNome}_idle_anim`);
+                        });
+                    }
+                } else {
+                    nemico.play(`${nomeNemico}_idle_anim`);
+                }
+            });
+
+            // I membri della band attaccano (se non stanno urlando di dolore per la animazione 'hurt')
             membri.forEach(m => {
+                let sprite = bandSprites[m];
+                
+                // Se sta già subendo un colpo (hurt in esecuzione), non interromperlo per farlo saltare/attaccare
+                if (sprite.anims.currentAnim && sprite.anims.currentAnim.key.includes('hurt')) return;
+
                 let mossa = Math.random() > 0.5 ? 'attack' : 'jump';
-                bandSprites[m].play(`${m}_${mossa}_anim`).once('animationcomplete', () => {
-                    bandSprites[m].play(`${m}_idle_anim`);
+                sprite.play(`${m}_${mossa}_anim`).once('animationcomplete', () => {
+                    // Controlla per sicurezza che non sia stato colpito nel frattempo prima di rimetterlo in idle
+                    if (sprite.anims.currentAnim && sprite.anims.currentAnim.key.includes(mossa)) {
+                        sprite.play(`${m}_idle_anim`);
+                    }
                 });
             });
         },
@@ -200,10 +247,9 @@ function update() {
             if (p.x < -200) p.x = 2500 + Math.random() * 1000;
         });
     } else if (faseVideo === 1) {
-        cielo.tilePositionX += 0.2;
         skyline.tilePositionX += 1; 
         pavimento.tilePositionX += 5; 
     } else if (faseVideo === 2) {
-        cielo.tilePositionX += 0.1; 
+        rovine.tilePositionX += 0.5; // Le rovine si muovono lentissime per dare un senso di atmosfera in battaglia
     }
 }
