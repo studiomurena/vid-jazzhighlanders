@@ -13,7 +13,7 @@ const game = new Phaser.Game(config);
 
 // Variabili globali
 let cielo, skyline, rovine, pavimento;
-let furgone;
+let furga;
 let pali = []; // Un array per gestire i pali che scorrono
 let ostacoli = []; // Per i barili e gommoni
 let bandSprites = {}; // Qui salveremo i personaggi sul tetto
@@ -29,7 +29,7 @@ function preload() {
     this.load.image('skyline', 'assets/skyline.png');
     this.load.image('rovine', 'assets/rovine.png');
     this.load.image('pavimento', 'assets/pavimento.png');
-    this.load.image('furgone', 'assets/furgone.png');
+    this.load.image('furga', 'assets/furga-idle.png');
 
     // Nuovi Props
     this.load.image('barili', 'assets/barili.png');
