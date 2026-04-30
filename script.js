@@ -7,6 +7,11 @@ const config = {
 
 const game = new Phaser.Game(config);
 
+// --- IL BASTONE MAGICO PER I TEST ---
+// Metti TRUE per fare i test super veloci. Metti FALSE quando devi registrare il video reale!
+const MODALITA_TEST = true; 
+const mTempo = MODALITA_TEST ? 0.1 : 1; // Se in test, tutto avviene 10 volte più veloce
+
 // Variabili globali
 let cielo, skyline, rovine, pavimento;
 let furgone; 
@@ -38,15 +43,9 @@ function preload() {
 
     [...membri, ...cattivi].forEach(char => {
         animazioni.forEach(anim => {
-            if (this.textures.exists(`${char}_${anim}`)) {
-                let isDeath = (anim === 'fall' || anim === 'explode');
-                this.anims.create({
-                    key: `${char}_${anim}_anim`,
-                    frames: this.anims.generateFrameNumbers(`${char}_${anim}`, { start: 0, end: 24 }),
-                    frameRate: 15, 
-                    repeat: isDeath ? 0 : -1 
-                });
-            }
+            this.load.spritesheet(`${char}_${anim}`, `assets/${char}-${anim}.png`, { 
+                frameWidth: 256, frameHeight: 256, endFrame: 24
+            });
         });
     });
 }
@@ -73,11 +72,12 @@ function create() {
     ombraPavimento.fillRect(0, 780, 1920, 60); 
     ombraPavimento.setDepth(2.1);
 
-    // --- 2. CREAZIONE ANIMAZIONI ---
-    this.anims.create({ key: 'furgone_idle_anim', frames: this.anims.generateFrameNumbers('furgone_idle', { start: 0, end: 24 }), frameRate: 15, repeat: -1 });
-    this.anims.create({ key: 'furgone_run_anim', frames: this.anims.generateFrameNumbers('furgone_run', { start: 0, end: 24 }), frameRate: 22, repeat: -1 });
-    this.anims.create({ key: 'furgone_spins_anim', frames: this.anims.generateFrameNumbers('furgone_spins', { start: 0, end: 24 }), frameRate: 25, repeat: -1 });
-    this.anims.create({ key: 'barili_fuoco', frames: this.anims.generateFrameNumbers('barili_animati', { start: 0, end: 24 }), frameRate: 12, repeat: -1 });
+    // --- 2. CREAZIONE ANIMAZIONI (Con protezioni anti-crash) ---
+    if (this.textures.exists('furgone_idle')) this.anims.create({ key: 'furgone_idle_anim', frames: this.anims.generateFrameNumbers('furgone_idle', { start: 0, end: 24 }), frameRate: 15, repeat: -1 });
+    if (this.textures.exists('furgone_run')) this.anims.create({ key: 'furgone_run_anim', frames: this.anims.generateFrameNumbers('furgone_run', { start: 0, end: 24 }), frameRate: 22, repeat: -1 });
+    if (this.textures.exists('furgone_spins')) this.anims.create({ key: 'furgone_spins_anim', frames: this.anims.generateFrameNumbers('furgone_spins', { start: 0, end: 24 }), frameRate: 25, repeat: -1 });
+    
+    if (this.textures.exists('barili_animati')) this.anims.create({ key: 'barili_fuoco', frames: this.anims.generateFrameNumbers('barili_animati', { start: 0, end: 24 }), frameRate: 12, repeat: -1 });
 
     [...membri, ...cattivi].forEach(char => {
         animazioni.forEach(anim => {
@@ -97,10 +97,12 @@ function create() {
     pali.push(this.add.image(2000, 540, 'palo1').setDepth(10).setScale(1.5));
     pali.push(this.add.image(3000, 540, 'palo2').setDepth(10).setScale(1.5));
 
-    furgone = this.add.sprite(960, 700, 'furgone_run').setDepth(3).setScale(3.5).play('furgone_run_anim');
+    furgone = this.add.sprite(960, 700, 'furgone_run').setDepth(3).setScale(3.5);
+    if (this.anims.exists('furgone_run_anim')) furgone.play('furgone_run_anim');
 
     let posizioniBandX = { 'carma': 350, 'ferraz': 600, 'mauri': 850, 'nan': 1100, 'falcon': 1350 };
     membri.forEach(m => {
+        // Appaiono INVISIBILI (perché sono nel furgone)
         bandSprites[m] = this.add.sprite(posizioniBandX[m], 780, `${m}_walk`).setDepth(4).setScale(1.5).setVisible(false);
     });
 
@@ -111,8 +113,10 @@ function create() {
     ];
     configOstacoli.forEach(ost => {
         let el = ost.type === 'barili_animati' ? 
-            this.add.sprite(ost.x, ost.y, 'barili_animati').play('barili_fuoco') : 
+            this.add.sprite(ost.x, ost.y, 'barili_animati') : 
             this.add.image(ost.x, ost.y, 'gommoni');
+            
+        if (ost.type === 'barili_animati' && this.anims.exists('barili_fuoco')) el.play('barili_fuoco');
         el.setDepth(3).setScale(1.1);
         ostacoli.push(el);
     });
@@ -127,103 +131,120 @@ function create() {
     ];
 
     copioneNemici.forEach((n, i) => {
+        // Nascosti a destra fuori schermo (X: 2500)
         let nemico = this.add.sprite(2500 + (i * 200), n.y, `${n.tipo}_walk`).setDepth(4).setScale(1.5).setFlipX(true); 
         if (this.anims.exists(`${n.tipo}_walk_anim`)) nemico.play(`${n.tipo}_walk_anim`);
         nemico.targetX = n.targetX; nemico.bersaglioNome = n.bersaglio;
         nemiciSprites.push(nemico);
     });
 
-    // Avvio dei Lampi
     innescaLampi(this);
 
-    // --- LA REGIA DEI TEMPI ESATTI ---
+    // --- LA REGIA DEI TEMPI ESATTI (Ora influenzati dal mTempo) ---
 
-    // A 18 secondi: Il furgone frena sgommando (SPINS), solo qui!
-    this.time.delayedCall(18000, () => {
-        furgone.play('furgone_spins_anim');
-        furgone.y = 650; 
-        furgone.setScale(3.15); 
+    // A 18s (o 1.8s in test): Derapata per fermarsi
+    this.time.delayedCall(18000 * mTempo, () => {
+        if (this.anims.exists('furgone_spins_anim')) {
+            furgone.play('furgone_spins_anim');
+            furgone.y = 650; 
+            furgone.setScale(3.15); 
+        }
     });
 
-    // FASE 2: A piedi (20s)
-    this.time.delayedCall(20000, () => {
+    // FASE 2 A 20s (o 2s in test): I regaz scendono
+    this.time.delayedCall(20000 * mTempo, () => {
         faseVideo = 2; 
         cielo.setVisible(false); skyline.setVisible(true);
         pali.forEach(p => p.setVisible(false));
 
-        furgone.play('furgone_run_anim'); 
+        if (this.anims.exists('furgone_run_anim')) furgone.play('furgone_run_anim'); 
         furgone.y = 700; 
         furgone.setScale(3.5); 
         
-        this.tweens.add({ targets: furgone, x: -1000, duration: 4000, ease: 'Power2' });
+        this.tweens.add({ targets: furgone, x: -1000, duration: 4000 * mTempo, ease: 'Power2' });
         
+        // ECCOLI! Vengono resi visibili!
         membri.forEach(m => {
-            bandSprites[m].setVisible(true).play(`${m}_walk_anim`).y = 700; 
-            this.tweens.add({ targets: bandSprites[m], y: 780, duration: 500, ease: 'Bounce.easeOut' });
+            let s = bandSprites[m];
+            s.setVisible(true); // Compaiono magicamente
+            s.y = 700;
+            if (this.anims.exists(`${m}_walk_anim`)) s.play(`${m}_walk_anim`);
+            this.tweens.add({ targets: s, y: 780, duration: 500 * mTempo, ease: 'Bounce.easeOut' });
         });
     });
 
-    // FASE 3: Rovine e Rissa (50s)
-    this.time.delayedCall(50000, () => {
+    // FASE 3 A 50s (o 5s in test): Rovine e Rissa, entrano i nemici
+    this.time.delayedCall(50000 * mTempo, () => {
         faseVideo = 3; 
         skyline.setVisible(false); rovine.setVisible(true);
-        membri.forEach(m => bandSprites[m].play(`${m}_idle_anim`));
+        
+        membri.forEach(m => {
+            if (this.anims.exists(`${m}_idle_anim`)) bandSprites[m].play(`${m}_idle_anim`);
+        });
 
-        this.tweens.add({ targets: ostacoli, x: '-=1200', duration: 3000, ease: 'Power2' });
+        this.tweens.add({ targets: ostacoli, x: '-=1200', duration: 3000 * mTempo, ease: 'Power2' });
+        
+        // I nemici corrono verso lo schermo
         nemiciSprites.forEach(n => {
             this.tweens.add({
-                targets: n, x: n.targetX, duration: 3000, ease: 'Power2',
-                onComplete: () => { if (this.anims.exists(`${n.texture.key.split('_')[0]}_attack_anim`)) n.play(`${n.texture.key.split('_')[0]}_attack_anim`); }
+                targets: n, x: n.targetX, duration: 3000 * mTempo, ease: 'Power2',
+                onComplete: () => { 
+                    let nome = n.texture.key.split('_')[0];
+                    if (this.anims.exists(`${nome}_attack_anim`)) n.play(`${nome}_attack_anim`); 
+                }
             });
         });
         
-        this.time.delayedCall(3000, () => iniziaRissa(this));
+        this.time.delayedCall(3000 * mTempo, () => iniziaRissa(this));
     });
 
-    // IL MASSACRO (75s storditi, 82s sconfitti)
-    this.time.delayedCall(75000, () => { statoRissa = 1; }); 
-    this.time.delayedCall(82000, () => {
+    // IL MASSACRO a 75s e 82s (7.5s e 8.2s in test)
+    this.time.delayedCall(75000 * mTempo, () => { statoRissa = 1; }); 
+    this.time.delayedCall(82000 * mTempo, () => {
         statoRissa = 2; 
         if(rissaEvent) rissaEvent.remove(); 
         
-        membri.forEach(m => bandSprites[m].play(`${m}_idle_anim`)); 
+        membri.forEach(m => {
+             if (this.anims.exists(`${m}_idle_anim`)) bandSprites[m].play(`${m}_idle_anim`);
+        }); 
 
         nemiciSprites.forEach(n => {
             let nome = n.texture.key.split('_')[0];
             let animMorte = nome === 'copzombie' ? 'fall' : 'explode';
             if (this.anims.exists(`${nome}_${animMorte}_anim`)) {
                 n.play(`${nome}_${animMorte}_anim`).once('animationcomplete', () => {
-                    this.tweens.add({ targets: n, alpha: 0, duration: 1500 }); 
+                    this.tweens.add({ targets: n, alpha: 0, duration: 1500 * mTempo }); 
                 });
             }
         });
     });
 
-    // FASE 4: Ritorno di fiamma senza Spins (90s)
-    this.time.delayedCall(90000, () => {
+    // FASE 4 A 90s (9s in test): Ritorno di fiamma 
+    this.time.delayedCall(90000 * mTempo, () => {
         faseVideo = 4;
         rovine.setVisible(false); skyline.setVisible(true);
         
-        membri.forEach(m => this.tweens.add({ targets: bandSprites[m], alpha: 0, duration: 500 }));
-        ostacoli.forEach(o => this.tweens.add({ targets: o, alpha: 0, duration: 500 }));
+        membri.forEach(m => this.tweens.add({ targets: bandSprites[m], alpha: 0, duration: 500 * mTempo }));
+        ostacoli.forEach(o => this.tweens.add({ targets: o, alpha: 0, duration: 500 * mTempo }));
 
         furgone.x = -800;
         furgone.setVisible(true);
-        furgone.play('furgone_run_anim'); 
+        if (this.anims.exists('furgone_run_anim')) furgone.play('furgone_run_anim'); 
         
-        this.tweens.add({ targets: furgone, x: 960, duration: 2500, ease: 'Power2' });
+        this.tweens.add({ targets: furgone, x: 960, duration: 2500 * mTempo, ease: 'Power2' });
         
         pali.forEach(p => p.setVisible(true)); 
     });
 
-    // FASE 5: Cielo (105s)
-    this.time.delayedCall(105000, () => {
+    // FASE 5 A 105s (10.5s in test)
+    this.time.delayedCall(105000 * mTempo, () => {
         faseVideo = 5;
         skyline.setVisible(false); cielo.setVisible(true);
     });
 }
 
 function iniziaRissa(scene) {
+    // La rissa non si velocizza col mTempo, vogliamo godercela al giusto ritmo!
     rissaEvent = scene.time.addEvent({
         delay: 1000,
         callback: () => {
@@ -231,24 +252,34 @@ function iniziaRissa(scene) {
                 nemiciSprites.forEach(n => {
                     let nome = n.texture.key.split('_')[0];
                     if (Math.random() > 0.5) {
-                        n.play(`${nome}_attack_anim`);
+                        if (scene.anims.exists(`${nome}_attack_anim`)) n.play(`${nome}_attack_anim`);
                         let bersaglio = bandSprites[n.bersaglioNome];
                         if (scene.anims.exists(`${n.bersaglioNome}_hurt_anim`)) {
-                            bersaglio.play(`${n.bersaglioNome}_hurt_anim`).once('animationcomplete', () => bersaglio.play(`${n.bersaglioNome}_idle_anim`));
+                            bersaglio.play(`${n.bersaglioNome}_hurt_anim`).once('animationcomplete', () => {
+                                if (scene.anims.exists(`${n.bersaglioNome}_idle_anim`)) bersaglio.play(`${n.bersaglioNome}_idle_anim`);
+                            });
                         }
-                    } else { n.play(`${nome}_idle_anim`); }
+                    } else { 
+                        if (scene.anims.exists(`${nome}_idle_anim`)) n.play(`${nome}_idle_anim`); 
+                    }
                 });
 
                 membri.forEach(m => {
                     let sprite = bandSprites[m];
                     if (sprite.anims.currentAnim && sprite.anims.currentAnim.key.includes('hurt')) return;
                     let mossa = Math.random() > 0.5 ? 'attack' : 'jump';
-                    sprite.play(`${m}_${mossa}_anim`).once('animationcomplete', () => {
-                        if (sprite.anims.currentAnim && sprite.anims.currentAnim.key.includes(mossa)) sprite.play(`${m}_idle_anim`);
-                    });
+                    if (scene.anims.exists(`${m}_${mossa}_anim`)) {
+                        sprite.play(`${m}_${mossa}_anim`).once('animationcomplete', () => {
+                            if (sprite.anims.currentAnim && sprite.anims.currentAnim.key.includes(mossa) && scene.anims.exists(`${m}_idle_anim`)) {
+                                sprite.play(`${m}_idle_anim`);
+                            }
+                        });
+                    }
                 });
             } else if (statoRissa === 1) {
-                membri.forEach(m => bandSprites[m].play(`${m}_attack_anim`));
+                membri.forEach(m => {
+                    if (scene.anims.exists(`${m}_attack_anim`)) bandSprites[m].play(`${m}_attack_anim`);
+                });
                 nemiciSprites.forEach(n => {
                     let nome = n.texture.key.split('_')[0];
                     if (scene.anims.exists(`${nome}_hurt_anim`)) n.play(`${nome}_hurt_anim`);
@@ -259,52 +290,47 @@ function iniziaRissa(scene) {
     });
 }
 
-// NUOVA FUNZIONE: Sistema Temporalesco Casuale
 function innescaLampi(scene) {
-    // Creiamo il rettangolo del lampo (Depth 1 = Dietro l'ombra, davanti allo sfondo)
     let flashRect = scene.add.rectangle(960, 540, 1920, 1080, 0xffaa00)
         .setDepth(1)
         .setAlpha(0)
         .setBlendMode(Phaser.BlendModes.ADD);
 
     function prossimoLampo() {
-        // I lampi colpiscono tra i 5 e i 12 secondi
-        let attesa = Phaser.Math.Between(5000, 12000);
+        let attesa = Phaser.Math.Between(5000, 12000) * mTempo;
         
         scene.time.delayedCall(attesa, () => {
-            // Scegliamo un colore caldo a caso (Arancio scuro, Giallo ambra, Giallo acceso)
             let coloriLampi = [0xff8800, 0xffaa00, 0xffcc00];
             flashRect.fillColor = Phaser.Math.RND.pick(coloriLampi);
 
-            // Sfarfallio veloce (1 o 2 lampeggi rapidi)
             scene.tweens.add({
                 targets: flashRect,
-                alpha: 0.5, // Non troppo accecante (0.5 su 1.0)
+                alpha: 0.5, 
                 duration: 60,
                 yoyo: true,
                 repeat: Phaser.Math.Between(1, 2), 
-                onComplete: () => {
-                    prossimoLampo(); // Prepara il prossimo!
-                }
+                onComplete: () => { prossimoLampo(); }
             });
         });
     }
-
-    prossimoLampo(); // Fa partire il ciclo
+    prossimoLampo(); 
 }
 
 function update() {
+    // Modificatori di velocità basati anche loro sulla modalità test se vuoi correre di più
+    let spd = MODALITA_TEST ? 2 : 1; 
+
     if (faseVideo === 1 || faseVideo === 4 || faseVideo === 5) {
-        if(faseVideo === 1) cielo.tilePositionX += 1;
-        if(faseVideo === 4) skyline.tilePositionX += 2;
-        if(faseVideo === 5) cielo.tilePositionX += 1;
+        if(faseVideo === 1) cielo.tilePositionX += 1 * spd;
+        if(faseVideo === 4) skyline.tilePositionX += 2 * spd;
+        if(faseVideo === 5) cielo.tilePositionX += 1 * spd;
         
-        pavimento.tilePositionX += 30;
-        pali.forEach(p => { p.x -= 50; if (p.x < -200) p.x = 2500 + Math.random() * 1000; });
+        pavimento.tilePositionX += 30 * spd;
+        pali.forEach(p => { p.x -= 50 * spd; if (p.x < -200) p.x = 2500 + Math.random() * 1000; });
     } else if (faseVideo === 2) {
-        skyline.tilePositionX += 1; 
-        pavimento.tilePositionX += 5; 
+        skyline.tilePositionX += 1 * spd; 
+        pavimento.tilePositionX += 5 * spd; 
     } else if (faseVideo === 3) {
-        rovine.tilePositionX += 0.5; 
+        rovine.tilePositionX += 0.5 * spd; 
     }
 }
