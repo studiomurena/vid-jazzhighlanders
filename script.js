@@ -9,7 +9,7 @@ const game = new Phaser.Game(config);
 
 // Variabili globali
 let cielo, skyline, rovine, pavimento;
-let furga;
+let furgone; // Rinominato!
 let pali = [], ostacoli = [], nemiciSprites = [];
 let bandSprites = {}; 
 
@@ -19,7 +19,6 @@ let rissaEvent; // Il timer della lotta
 
 const membri = ['carma', 'ferraz', 'mauri', 'nan', 'falcon'];
 const cattivi = ['copzombie', 'drogato']; 
-// Aggiunte le animazioni di danno e morte!
 const animazioni = ['idle', 'attack', 'walk', 'jump', 'hurt', 'fall', 'explode']; 
 
 function preload() {
@@ -31,9 +30,10 @@ function preload() {
     this.load.image('palo2', 'assets/palo2.png');
     this.load.image('gommoni', 'assets/gommoni.png'); 
 
-    // Entrambe le animazioni del furgone
-    this.load.spritesheet('furga_walk', 'assets/furga-walk.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
-    this.load.spritesheet('furga_run', 'assets/furga-run.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
+    // I nuovi asset del Furgone!
+    this.load.spritesheet('furgone_idle', 'assets/furgone-idle.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
+    this.load.spritesheet('furgone_run', 'assets/furgone-run.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
+    this.load.spritesheet('furgone_spins', 'assets/furgone-spins.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
     
     this.load.spritesheet('barili_animati', 'assets/barili.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
 
@@ -59,28 +59,35 @@ function create() {
     // EFFETTO OMBRA ALL'ORIZZONTE (Sotto il pavimento)
     let ombraSfondo = this.add.graphics();
     ombraSfondo.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.9, 0.9);
-    ombraSfondo.fillRect(0, 680, 1920, 100); // Sfuma dall'alto verso il nero scuro
+    ombraSfondo.fillRect(0, 680, 1920, 100); 
     ombraSfondo.setDepth(1.5);
 
     pavimento = this.add.tileSprite(960, 930, 1920, 300, 'pavimento').setDepth(2);
 
-    // EFFETTO OMBRA SUL PAVIMENTO (Per nascondere il taglio netto)
+    // EFFETTO OMBRA SUL PAVIMENTO
     let ombraPavimento = this.add.graphics();
     ombraPavimento.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.9, 0.9, 0, 0);
-    ombraPavimento.fillRect(0, 780, 1920, 60); // Sfuma dal nero scuro verso il pavimento chiaro
+    ombraPavimento.fillRect(0, 780, 1920, 60); 
     ombraPavimento.setDepth(2.1);
 
     // --- 2. CREAZIONE ANIMAZIONI ---
+    // Animazioni aggiornate per il Furgone
     this.anims.create({
-        key: 'furga_camminata',
-        frames: this.anims.generateFrameNumbers('furga_walk', { start: 0, end: 24 }),
+        key: 'furgone_idle_anim',
+        frames: this.anims.generateFrameNumbers('furgone_idle', { start: 0, end: 24 }),
         frameRate: 15, repeat: -1
     });
 
     this.anims.create({
-        key: 'furga_corsa',
-        frames: this.anims.generateFrameNumbers('furga_run', { start: 0, end: 24 }),
+        key: 'furgone_run_anim',
+        frames: this.anims.generateFrameNumbers('furgone_run', { start: 0, end: 24 }),
         frameRate: 22, repeat: -1
+    });
+
+    this.anims.create({
+        key: 'furgone_spins_anim',
+        frames: this.anims.generateFrameNumbers('furgone_spins', { start: 0, end: 24 }),
+        frameRate: 25, repeat: -1 // Molto veloce per dare impatto allo spin!
     });
 
     this.anims.create({
@@ -92,13 +99,12 @@ function create() {
     [...membri, ...cattivi].forEach(char => {
         animazioni.forEach(anim => {
             if (this.textures.exists(`${char}_${anim}`)) {
-                // Se è fall o explode, NON si deve ripetere!
                 let isDeath = (anim === 'fall' || anim === 'explode');
                 this.anims.create({
                     key: `${char}_${anim}_anim`,
                     frames: this.anims.generateFrameNumbers(`${char}_${anim}`, { start: 0, end: 24 }),
                     frameRate: 15, 
-                    repeat: isDeath ? 0 : -1 // 0 significa suona una volta e fermati
+                    repeat: isDeath ? 0 : -1 
                 });
             }
         });
@@ -108,16 +114,18 @@ function create() {
     pali.push(this.add.image(2000, 540, 'palo1').setDepth(10).setScale(1.5));
     pali.push(this.add.image(3000, 540, 'palo2').setDepth(10).setScale(1.5));
 
-    furga = this.add.sprite(960, 700, 'furga_walk').setDepth(3).setScale(3.5).play('furga_camminata');
+    // Lo inseriamo in stato di RUN fin da subito
+    furgone = this.add.sprite(960, 700, 'furgone_run').setDepth(3).setScale(3.5).play('furgone_run_anim');
 
-    // Timer per alternare Camminata e Corsa del Furgone
+    // Timer per sgommate casuali (spins) durante la corsa!
     this.time.addEvent({
         delay: 4000,
         callback: () => {
             if (faseVideo === 1 || faseVideo === 4 || faseVideo === 5) {
                 if (Math.random() > 0.4) {
-                    furga.play('furga_corsa');
-                    this.time.delayedCall(1200, () => { furga.play('furga_camminata'); });
+                    furgone.play('furgone_spins_anim');
+                    // Dopo 1.2 secondi, torna a correre normale
+                    this.time.delayedCall(1200, () => { furgone.play('furgone_run_anim'); });
                 }
             }
         },
@@ -166,7 +174,8 @@ function create() {
         cielo.setVisible(false); skyline.setVisible(true);
         pali.forEach(p => p.setVisible(false));
 
-        this.tweens.add({ targets: furga, x: -1000, duration: 4000, ease: 'Power2' });
+        // Il Furgone esce
+        this.tweens.add({ targets: furgone, x: -1000, duration: 4000, ease: 'Power2' });
         membri.forEach(m => {
             bandSprites[m].setVisible(true).play(`${m}_walk_anim`).y = 700; 
             this.tweens.add({ targets: bandSprites[m], y: 780, duration: 500, ease: 'Bounce.easeOut' });
@@ -191,19 +200,19 @@ function create() {
     });
 
     // FASE 3 (IL MASSACRO): I nemici soccombono (75s)
-    this.time.delayedCall(75000, () => { statoRissa = 1; }); // Storditi, subiscono botte da orbi
+    this.time.delayedCall(75000, () => { statoRissa = 1; }); 
     this.time.delayedCall(82000, () => {
-        statoRissa = 2; // Morti!
-        if(rissaEvent) rissaEvent.remove(); // Stoppa il combattimento!
+        statoRissa = 2; 
+        if(rissaEvent) rissaEvent.remove(); 
         
-        membri.forEach(m => bandSprites[m].play(`${m}_idle_anim`)); // I regaz si fermano e guardano
+        membri.forEach(m => bandSprites[m].play(`${m}_idle_anim`)); 
 
         nemiciSprites.forEach(n => {
             let nome = n.texture.key.split('_')[0];
             let animMorte = nome === 'copzombie' ? 'fall' : 'explode';
             if (this.anims.exists(`${nome}_${animMorte}_anim`)) {
                 n.play(`${nome}_${animMorte}_anim`).once('animationcomplete', () => {
-                    this.tweens.add({ targets: n, alpha: 0, duration: 1500 }); // Svaniscono
+                    this.tweens.add({ targets: n, alpha: 0, duration: 1500 }); 
                 });
             }
         });
@@ -214,16 +223,16 @@ function create() {
         faseVideo = 4;
         rovine.setVisible(false); skyline.setVisible(true);
         
-        // Sparisce la band e la monnezza
         membri.forEach(m => this.tweens.add({ targets: bandSprites[m], alpha: 0, duration: 500 }));
         ostacoli.forEach(o => this.tweens.add({ targets: o, alpha: 0, duration: 500 }));
 
         // Rientra il bestione
-        furga.x = -800;
-        furga.setVisible(true);
-        this.tweens.add({ targets: furga, x: 960, duration: 2500, ease: 'Power2' });
+        furgone.x = -800;
+        furgone.setVisible(true);
+        furgone.play('furgone_run_anim'); // Si assicura di rientrare sgommando!
+        this.tweens.add({ targets: furgone, x: 960, duration: 2500, ease: 'Power2' });
         
-        pali.forEach(p => p.setVisible(true)); // Tornano i pali a sfrecciare
+        pali.forEach(p => p.setVisible(true)); 
     });
 
     // FASE 5: Cielo e chiusura (105s)
@@ -238,7 +247,6 @@ function iniziaRissa(scene) {
         delay: 1000,
         callback: () => {
             if (statoRissa === 0) {
-                // LOTTA NORMALE
                 nemiciSprites.forEach(n => {
                     let nome = n.texture.key.split('_')[0];
                     if (Math.random() > 0.5) {
@@ -259,7 +267,6 @@ function iniziaRissa(scene) {
                     });
                 });
             } else if (statoRissa === 1) {
-                // I NEMICI SONO STORDITI: Subiscono colpi dai regaz
                 membri.forEach(m => bandSprites[m].play(`${m}_attack_anim`));
                 nemiciSprites.forEach(n => {
                     let nome = n.texture.key.split('_')[0];
@@ -273,7 +280,6 @@ function iniziaRissa(scene) {
 
 function update() {
     if (faseVideo === 1 || faseVideo === 4 || faseVideo === 5) {
-        // FURGONE IN CORSA (Veloce)
         if(faseVideo === 1) cielo.tilePositionX += 1;
         if(faseVideo === 4) skyline.tilePositionX += 2;
         if(faseVideo === 5) cielo.tilePositionX += 1;
@@ -281,11 +287,9 @@ function update() {
         pavimento.tilePositionX += 30;
         pali.forEach(p => { p.x -= 50; if (p.x < -200) p.x = 2500 + Math.random() * 1000; });
     } else if (faseVideo === 2) {
-        // A PIEDI (Lento)
         skyline.tilePositionX += 1; 
         pavimento.tilePositionX += 5; 
     } else if (faseVideo === 3) {
-        // RISSA (Quasi fermo)
         rovine.tilePositionX += 0.5; 
     }
 }
