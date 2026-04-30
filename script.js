@@ -38,9 +38,15 @@ function preload() {
 
     [...membri, ...cattivi].forEach(char => {
         animazioni.forEach(anim => {
-            this.load.spritesheet(`${char}_${anim}`, `assets/${char}-${anim}.png`, { 
-                frameWidth: 256, frameHeight: 256, endFrame: 24
-            });
+            if (this.textures.exists(`${char}_${anim}`)) {
+                let isDeath = (anim === 'fall' || anim === 'explode');
+                this.anims.create({
+                    key: `${char}_${anim}_anim`,
+                    frames: this.anims.generateFrameNumbers(`${char}_${anim}`, { start: 0, end: 24 }),
+                    frameRate: 15, 
+                    repeat: isDeath ? 0 : -1 
+                });
+            }
         });
     });
 }
@@ -91,7 +97,6 @@ function create() {
     pali.push(this.add.image(2000, 540, 'palo1').setDepth(10).setScale(1.5));
     pali.push(this.add.image(3000, 540, 'palo2').setDepth(10).setScale(1.5));
 
-    // Il Furgone parte in corsa!
     furgone = this.add.sprite(960, 700, 'furgone_run').setDepth(3).setScale(3.5).play('furgone_run_anim');
 
     let posizioniBandX = { 'carma': 350, 'ferraz': 600, 'mauri': 850, 'nan': 1100, 'falcon': 1350 };
@@ -128,12 +133,16 @@ function create() {
         nemiciSprites.push(nemico);
     });
 
+    // Avvio dei Lampi
+    innescaLampi(this);
+
     // --- LA REGIA DEI TEMPI ESATTI ---
 
-    // A 18 secondi: Il furgone frena sgommando (SPINS)
+    // A 18 secondi: Il furgone frena sgommando (SPINS), solo qui!
     this.time.delayedCall(18000, () => {
         furgone.play('furgone_spins_anim');
-        furgone.y = 650; // TRUCCO: Lo alziamo leggermente per compensare l'errore del file PNG
+        furgone.y = 650; 
+        furgone.setScale(3.15); 
     });
 
     // FASE 2: A piedi (20s)
@@ -142,13 +151,12 @@ function create() {
         cielo.setVisible(false); skyline.setVisible(true);
         pali.forEach(p => p.setVisible(false));
 
-        furgone.play('furgone_run_anim'); // Smette di derapare
-        furgone.y = 700; // Torna alla Y corretta
+        furgone.play('furgone_run_anim'); 
+        furgone.y = 700; 
+        furgone.setScale(3.5); 
         
-        // Esce di scena
         this.tweens.add({ targets: furgone, x: -1000, duration: 4000, ease: 'Power2' });
         
-        // I regaz scendono
         membri.forEach(m => {
             bandSprites[m].setVisible(true).play(`${m}_walk_anim`).y = 700; 
             this.tweens.add({ targets: bandSprites[m], y: 780, duration: 500, ease: 'Bounce.easeOut' });
@@ -191,37 +199,19 @@ function create() {
         });
     });
 
-    // FASE 4: Ritorno di fiamma e Derapata finale (90s)
+    // FASE 4: Ritorno di fiamma senza Spins (90s)
     this.time.delayedCall(90000, () => {
         faseVideo = 4;
         rovine.setVisible(false); skyline.setVisible(true);
         
-        // Spariscono i buoni e i prop
         membri.forEach(m => this.tweens.add({ targets: bandSprites[m], alpha: 0, duration: 500 }));
         ostacoli.forEach(o => this.tweens.add({ targets: o, alpha: 0, duration: 500 }));
 
-        // Il bestione rientra a tutta velocità
         furgone.x = -800;
         furgone.setVisible(true);
         furgone.play('furgone_run_anim'); 
         
-        this.tweens.add({ 
-            targets: furgone, 
-            x: 960, 
-            duration: 2500, 
-            ease: 'Power2',
-            onComplete: () => {
-                // A 92.5 secondi arriva al centro e sgomma (SPINS) per caricarli!
-                furgone.play('furgone_spins_anim');
-                furgone.y = 650; // Trucco per compensare il PNG
-                
-                // Dopo 2 secondi di sgommata, riparte a palla
-                this.time.delayedCall(2000, () => {
-                    furgone.play('furgone_run_anim');
-                    furgone.y = 700; // Riposiziona
-                });
-            }
-        });
+        this.tweens.add({ targets: furgone, x: 960, duration: 2500, ease: 'Power2' });
         
         pali.forEach(p => p.setVisible(true)); 
     });
@@ -267,6 +257,40 @@ function iniziaRissa(scene) {
         },
         loop: true
     });
+}
+
+// NUOVA FUNZIONE: Sistema Temporalesco Casuale
+function innescaLampi(scene) {
+    // Creiamo il rettangolo del lampo (Depth 1 = Dietro l'ombra, davanti allo sfondo)
+    let flashRect = scene.add.rectangle(960, 540, 1920, 1080, 0xffaa00)
+        .setDepth(1)
+        .setAlpha(0)
+        .setBlendMode(Phaser.BlendModes.ADD);
+
+    function prossimoLampo() {
+        // I lampi colpiscono tra i 5 e i 12 secondi
+        let attesa = Phaser.Math.Between(5000, 12000);
+        
+        scene.time.delayedCall(attesa, () => {
+            // Scegliamo un colore caldo a caso (Arancio scuro, Giallo ambra, Giallo acceso)
+            let coloriLampi = [0xff8800, 0xffaa00, 0xffcc00];
+            flashRect.fillColor = Phaser.Math.RND.pick(coloriLampi);
+
+            // Sfarfallio veloce (1 o 2 lampeggi rapidi)
+            scene.tweens.add({
+                targets: flashRect,
+                alpha: 0.5, // Non troppo accecante (0.5 su 1.0)
+                duration: 60,
+                yoyo: true,
+                repeat: Phaser.Math.Between(1, 2), 
+                onComplete: () => {
+                    prossimoLampo(); // Prepara il prossimo!
+                }
+            });
+        });
+    }
+
+    prossimoLampo(); // Fa partire il ciclo
 }
 
 function update() {
