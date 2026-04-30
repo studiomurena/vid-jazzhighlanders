@@ -17,7 +17,8 @@ let bandSprites = {};
 let faseVideo = 0; 
 
 const membri = ['carma', 'ferraz', 'mauri', 'nan', 'falcon'];
-const cattivi = ['zombiecop', 'drogato']; 
+// ECCO LA CORREZIONE: copzombie invece di zombiecop
+const cattivi = ['copzombie', 'drogato']; 
 const animazioni = ['idle', 'attack', 'walk', 'jump']; 
 
 function preload() {
