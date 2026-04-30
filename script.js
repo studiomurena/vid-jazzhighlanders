@@ -2,206 +2,166 @@ const config = {
     type: Phaser.AUTO,
     width: 1920,
     height: 1080,
-    scene: {
-        preload: preload,
-        create: create,
-        update: update
-    }
+    scene: { preload: preload, create: create, update: update }
 };
 
 const game = new Phaser.Game(config);
 
 // Variabili globali
-let cielo, skyline, rovine, pavimento;
-let furgone;
-let pali = []; 
-let ostacoli = []; 
-let nemiciSprites = []; // Array per i cattivi
+let cielo, skyline, rovine, pavimento, furgone;
+let pali = [], ostacoli = [], nemiciSprites = [];
 let bandSprites = {}; 
 let isMoving = true;
-
-// --- CONFIGURAZIONE REGIA ---
-// Qui decidi quanto dura il viaggio in furgone prima della battaglia (in millisecondi)
-// 10000 = 10 secondi. Per farlo durare di più, basta alzare questo numero!
 const durataViaggio = 10000; 
 
-// Liste personaggi e animazioni
 const membri = ['carma', 'ferraz', 'mauri', 'nan', 'falcon'];
 const cattivi = ['zombiecop', 'drogato']; 
-// Assicurati di avere i file tipo "zombiecop-walk.png", "zombiecop-attack.png", ecc.
-const animazioni = ['idle', 'attack', 'wave', 'jump', 'walk']; 
+const animazioni = ['idle', 'attack', 'walk', 'jump']; 
 
 function preload() {
-    // Sfondi
-    this.load.image('cielo', 'assets/cielo.png');
-    this.load.image('skyline', 'assets/skyline.png');
-    this.load.image('rovine', 'assets/rovine.png');
-    this.load.image('pavimento', 'assets/pavimento.png');
+    // --- CARICAMENTO SFONDI (Dimensioni suggerite integrate) ---
+    this.load.image('cielo', 'assets/cielo.png');           // 1920 x 1080
+    this.load.image('skyline', 'assets/skyline.png');       // 3840 x 540
+    this.load.image('rovine', 'assets/rovine.png');         // 5760 x 600
+    this.load.image('pavimento', 'assets/pavimento.png');   // 7680 x 300
     
-    // Attenzione al nome! Nel tuo codice c'era 'furga' e 'furgone'. Uso furgone per coerenza.
-    this.load.image('furgone', 'assets/furgone.png');
+    // --- CARICAMENTO PROPS ---
+    this.load.image('furgone', 'assets/furgone.png');       // 1024 x 640
+    this.load.image('palo1', 'assets/palo1.png');           // 100 x 800
+    this.load.image('barili', 'assets/barili.png');         // 256 x 256
 
-    // Props
-    this.load.image('barili', 'assets/barili.png');
-    this.load.image('gommoni', 'assets/gommoni.png');
-    this.load.image('palo1', 'assets/palo1.png');
-    this.load.image('palo2', 'assets/palo2.png');
-
-    // Caricamento automatico Band
-    membri.forEach(membro => {
+    // --- CARICAMENTO SPRITESHEET (Griglia 5x5, 1280 totali) ---
+    [...membri, ...cattivi].forEach(char => {
         animazioni.forEach(anim => {
-            this.load.spritesheet(`${membro}_${anim}`, `assets/${membro}-${anim}.png`, { 
-                frameWidth: 256, frameHeight: 256 
-            });
-        });
-    });
-
-    // Caricamento automatico Cattivi
-    cattivi.forEach(cattivo => {
-        animazioni.forEach(anim => {
-            // Se non hai tutte le animazioni per i cattivi (es. wave), il browser darà un piccolo errore in console ma andrà avanti. 
-            // L'ideale è avere almeno walk, attack e idle per loro.
-            this.load.spritesheet(`${cattivo}_${anim}`, `assets/${cattivo}-${anim}.png`, { 
-                frameWidth: 256, frameHeight: 256 
+            this.load.spritesheet(`${char}_${anim}`, `assets/${char}-${anim}.png`, { 
+                frameWidth: 256, 
+                frameHeight: 256,
+                endFrame: 24 // I tuoi 25 elementi (0-24)
             });
         });
     });
 }
 
 function create() {
-    // 1. SFONDI (Uso setDepth per i livelli di profondità: 0 è in fondo, 10 è in primissimo piano)
+    // 1. SFONDI (Posizionati in base alle altezze suggerite)
+    // Cielo: statico o quasi
     cielo = this.add.tileSprite(960, 540, 1920, 1080, 'cielo').setDepth(0);
     
-    skyline = this.add.tileSprite(960, 540, 3840, 1080, 'skyline').setDepth(1);
+    // Skyline: a metà schermo (altezza 540)
+    skyline = this.add.tileSprite(960, 400, 1920, 540, 'skyline').setDepth(1);
     
-    // Le rovine le carichiamo ma le teniamo invisibili all'inizio
-    rovine = this.add.tileSprite(960, 540, 5760, 1080, 'rovine').setDepth(1);
-    rovine.setVisible(false); 
+    // Rovine: più larghe e basse (altezza 600)
+    rovine = this.add.tileSprite(960, 500, 1920, 600, 'rovine').setDepth(2).setVisible(false);
     
-    pavimento = this.add.tileSprite(960, 930, 7680, 300, 'pavimento').setDepth(2);
+    // Pavimento: in fondo (altezza 300)
+    pavimento = this.add.tileSprite(960, 930, 1920, 300, 'pavimento').setDepth(3);
 
-    // 2. PROPS IN MOVIMENTO
-    let paloA = this.add.image(2000, 700, 'palo1').setDepth(5);
-    let paloB = this.add.image(3500, 700, 'palo2').setDepth(5);
-    pali.push(paloA, paloB);
+    // 2. IL FURGONE (Dimensioni 1024x640)
+    // Lo posizioniamo in modo che le ruote tocchino il pavimento
+    furgone = this.add.image(960, 800, 'furgone').setDepth(4).setScale(1.1);
 
-    // 3. IL FURGONE
-    furgone = this.add.image(960, 800, 'furgone').setDepth(3);
-
-    // 4. CREAZIONE ANIMAZIONI (Per tutti: buoni e cattivi)
-    [...membri, ...cattivi].forEach(personaggio => {
+    // 3. CREAZIONE ANIMAZIONI
+    [...membri, ...cattivi].forEach(char => {
         animazioni.forEach(anim => {
-            let frames = this.anims.generateFrameNumbers(`${personaggio}_${anim}`);
-            if (frames) { // Crea l'animazione solo se il file esiste
+            if (this.textures.exists(`${char}_${anim}`)) {
                 this.anims.create({
-                    key: `${personaggio}_${anim}_anim`,
-                    frames: frames,
-                    frameRate: 10,
-                    repeat: (anim === 'attack' || anim === 'jump' || anim === 'hurt') ? 0 : -1 
+                    key: `${char}_${anim}_anim`,
+                    frames: this.anims.generateFrameNumbers(`${char}_${anim}`, { start: 0, end: 24 }),
+                    frameRate: 12,
+                    repeat: -1
                 });
             }
         });
     });
 
-    // 5. PIAZZARE LA BAND SUL FURGONE (Tutti in IDLE)
-    bandSprites['carma'] = this.add.sprite(750, 600, 'carma_idle').setDepth(4).play('carma_idle_anim');
-    bandSprites['ferraz'] = this.add.sprite(850, 580, 'ferraz_idle').setDepth(4).play('ferraz_idle_anim');
-    bandSprites['mauri'] = this.add.sprite(950, 610, 'mauri_idle').setDepth(4).play('mauri_idle_anim');
-    bandSprites['nan'] = this.add.sprite(1050, 570, 'nan_idle').setDepth(4).play('nan_idle_anim');
-    bandSprites['falcon'] = this.add.sprite(1150, 600, 'falcon_idle').setDepth(4).play('falcon_idle_anim');
+    // 4. POSIZIONAMENTO BAND SUL FURGONE
+    // Distribuiamo i 5 membri sul tetto (1024px di larghezza del furgone)
+    let posizioniX = [750, 850, 960, 1070, 1170];
+    membri.forEach((m, i) => {
+        bandSprites[m] = this.add.sprite(posizioniX[i], 650, `${m}_idle`)
+            .setDepth(5)
+            .setScale(1.2) // Li ingrandiamo un po' per farli vedere bene
+            .play(`${m}_idle_anim`);
+    });
 
-    // 6. PREPARARE BARRICATE E NEMICI (Fuori schermo a destra)
-    let barricataBarili = this.add.image(2200, 900, 'barili').setDepth(3);
-    let barricataGommoni = this.add.image(2400, 900, 'gommoni').setDepth(3);
-    ostacoli.push(barricataBarili, barricataGommoni);
+    // 5. PALI DELLA LUCE (Effetto velocità estrema)
+    for(let i=0; i<2; i++) {
+        let p = this.add.image(2000 + (i*1500), 540, 'palo1').setDepth(10).setScale(1.5);
+        pali.push(p);
+    }
 
-    // Creiamo i nemici ma li teniamo fuori schermo
-    let zombie = this.add.sprite(2300, 850, 'zombiecop_walk').setDepth(4).play('zombiecop_walk_anim');
-    let drogato = this.add.sprite(2500, 850, 'drogato_walk').setDepth(4).play('drogato_walk_anim');
-    nemiciSprites.push(zombie, drogato);
+    // 6. NEMICI E OSTACOLI (Nascosti a destra)
+    let barile = this.add.image(2800, 900, 'barili').setDepth(4).setScale(1.2);
+    ostacoli.push(barile);
 
-    // --- LA REGIA: IL CAMBIO DI SCENA ---
+    cattivi.forEach((c, i) => {
+        let n = this.add.sprite(3000 + (i * 400), 850, `${c}_walk`)
+            .setDepth(5)
+            .setScale(1.3);
+        if (this.anims.exists(`${c}_walk_anim`)) n.play(`${c}_walk_anim`);
+        nemiciSprites.push(n);
+    });
+
+    // --- REGIA: IL CAMBIO SCENA ---
     this.time.delayedCall(durataViaggio, () => {
-        isMoving = false; // Frena il furgone
-
-        // Cambiamo lo sfondo! Via la skyline, dentro le rovine
+        isMoving = false;
         skyline.setVisible(false);
         rovine.setVisible(true);
+        pali.forEach(p => p.alpha = 0); // Spariscono i pali
 
-        pali.forEach(p => p.setVisible(false)); 
-
-        // Facciamo scivolare gli ostacoli in scena
+        // Entrano nemici e ostacoli
         this.tweens.add({
-            targets: ostacoli,
-            x: '-=1000', 
-            duration: 1000,
-            ease: 'Power2'
-        });
-
-        // Facciamo camminare i nemici in scena
-        this.tweens.add({
-            targets: nemiciSprites,
-            x: '-=1000', 
-            duration: 2000, // Ci mettono un po' di più ad arrivare
-            ease: 'Linear',
+            targets: [...nemiciSprites, ...ostacoli],
+            x: '-=1500',
+            duration: 2000,
+            ease: 'Power2',
             onComplete: () => {
-                // I nemici sono arrivati e iniziano ad attaccare
                 nemiciSprites.forEach(n => {
-                    // Supponiamo che il nome del personaggio sia la prima parte della texture ('zombiecop_walk' -> 'zombiecop')
-                    let nomeCattivo = n.texture.key.split('_')[0];
-                    n.play(`${nomeCattivo}_attack_anim`);
+                    let nome = n.texture.key.split('_')[0];
+                    if (this.anims.exists(`${nome}_attack_anim`)) n.play(`${nome}_attack_anim`);
                 });
-
-                // Inizia la rissa continua per riempire i 3 minuti di video
-                iniziaRissaContinua(this);
+                iniziaRissa(this);
             }
         });
     });
 }
 
-// Funzione extra per tenere viva l'azione per tutto il tempo di registrazione
-function iniziaRissaContinua(scene) {
-    // Ogni 2 secondi facciamo fare un'azione random alla band e ai nemici
+function iniziaRissa(scene) {
     scene.time.addEvent({
         delay: 2000,
         callback: () => {
-            membri.forEach(membro => {
-                // Scegli a caso tra attack o jump per fare scena
+            membri.forEach(m => {
                 let mossa = Math.random() > 0.5 ? 'attack' : 'jump';
-                bandSprites[membro].play(`${membro}_${mossa}_anim`);
-                
-                // Dopo che l'animazione finisce, tornano in idle
-                bandSprites[membro].once('animationcomplete', () => {
-                    bandSprites[membro].play(`${membro}_idle_anim`);
-                });
-            });
-
-            nemiciSprites.forEach(nemico => {
-                let nomeCattivo = nemico.texture.key.split('_')[0];
-                nemico.play(`${nomeCattivo}_attack_anim`);
-                nemico.once('animationcomplete', () => {
-                    nemico.play(`${nomeCattivo}_idle_anim`);
+                bandSprites[m].play(`${m}_${mossa}_anim`).once('animationcomplete', () => {
+                    bandSprites[m].play(`${m}_idle_anim`);
                 });
             });
         },
-        loop: true // Continua all'infinito!
+        loop: true
     });
 }
 
 function update() {
     if (isMoving) {
-        // Movimento scena iniziale
-        skyline.tilePositionX += 1.5;   
-        pavimento.tilePositionX += 20; 
+        // Velocità differenziate per il Parallax
+        cielo.tilePositionX += 0.5;
+        skyline.tilePositionX += 2;
+        pavimento.tilePositionX += 25;
 
-        pali.forEach(palo => {
-            palo.x -= 25; 
-            if (palo.x < -200) {
-                palo.x = 2000 + Math.random() * 1000; 
-            }
+        // Movimento pali
+        pali.forEach(p => {
+            p.x -= 40;
+            if (p.x < -200) p.x = 2500;
         });
+
+        // Sobbalzo furgone (per dare vita)
+        furgone.y = 800 + Math.sin(this.time.now / 100) * 3;
+        // Anche i membri della band devono sobbalzare col furgone
+        Object.values(bandSprites).forEach(s => s.y = 650 + Math.sin(this.time.now / 100) * 3);
+
     } else {
-        // Quando sono fermi in battaglia, magari il cielo scorre lentissimo per dare atmosfera
+        // Da fermi scorre solo il cielo e le rovine lentissime
         cielo.tilePositionX += 0.2;
+        rovine.tilePositionX += 1;
     }
 }
