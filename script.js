@@ -9,13 +9,13 @@ const game = new Phaser.Game(config);
 
 // Variabili globali
 let cielo, skyline, rovine, pavimento;
-let furgone; // Rinominato!
+let furgone; 
 let pali = [], ostacoli = [], nemiciSprites = [];
 let bandSprites = {}; 
 
-let faseVideo = 1; // 1=Cielo, 2=Skyline a piedi, 3=Rissa, 4=Ritorno Skyline, 5=Ritorno Cielo
-let statoRissa = 0; // 0=Normale, 1=Nemici Storditi, 2=Nemici Morti
-let rissaEvent; // Il timer della lotta
+let faseVideo = 1; 
+let statoRissa = 0; 
+let rissaEvent; 
 
 const membri = ['carma', 'ferraz', 'mauri', 'nan', 'falcon'];
 const cattivi = ['copzombie', 'drogato']; 
@@ -30,7 +30,6 @@ function preload() {
     this.load.image('palo2', 'assets/palo2.png');
     this.load.image('gommoni', 'assets/gommoni.png'); 
 
-    // I nuovi asset del Furgone!
     this.load.spritesheet('furgone_idle', 'assets/furgone-idle.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
     this.load.spritesheet('furgone_run', 'assets/furgone-run.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
     this.load.spritesheet('furgone_spins', 'assets/furgone-spins.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
@@ -56,7 +55,6 @@ function create() {
     rovine = this.add.tileSprite(960, 540, 1920, 1080, 'rovine').setDepth(0).setVisible(false);
     rovine.tileScaleY = 2; rovine.tileScaleX = 2;
 
-    // EFFETTO OMBRA ALL'ORIZZONTE (Sotto il pavimento)
     let ombraSfondo = this.add.graphics();
     ombraSfondo.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.9, 0.9);
     ombraSfondo.fillRect(0, 680, 1920, 100); 
@@ -64,37 +62,16 @@ function create() {
 
     pavimento = this.add.tileSprite(960, 930, 1920, 300, 'pavimento').setDepth(2);
 
-    // EFFETTO OMBRA SUL PAVIMENTO
     let ombraPavimento = this.add.graphics();
     ombraPavimento.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.9, 0.9, 0, 0);
     ombraPavimento.fillRect(0, 780, 1920, 60); 
     ombraPavimento.setDepth(2.1);
 
     // --- 2. CREAZIONE ANIMAZIONI ---
-    // Animazioni aggiornate per il Furgone
-    this.anims.create({
-        key: 'furgone_idle_anim',
-        frames: this.anims.generateFrameNumbers('furgone_idle', { start: 0, end: 24 }),
-        frameRate: 15, repeat: -1
-    });
-
-    this.anims.create({
-        key: 'furgone_run_anim',
-        frames: this.anims.generateFrameNumbers('furgone_run', { start: 0, end: 24 }),
-        frameRate: 22, repeat: -1
-    });
-
-    this.anims.create({
-        key: 'furgone_spins_anim',
-        frames: this.anims.generateFrameNumbers('furgone_spins', { start: 0, end: 24 }),
-        frameRate: 25, repeat: -1 // Molto veloce per dare impatto allo spin!
-    });
-
-    this.anims.create({
-        key: 'barili_fuoco',
-        frames: this.anims.generateFrameNumbers('barili_animati', { start: 0, end: 24 }),
-        frameRate: 12, repeat: -1
-    });
+    this.anims.create({ key: 'furgone_idle_anim', frames: this.anims.generateFrameNumbers('furgone_idle', { start: 0, end: 24 }), frameRate: 15, repeat: -1 });
+    this.anims.create({ key: 'furgone_run_anim', frames: this.anims.generateFrameNumbers('furgone_run', { start: 0, end: 24 }), frameRate: 22, repeat: -1 });
+    this.anims.create({ key: 'furgone_spins_anim', frames: this.anims.generateFrameNumbers('furgone_spins', { start: 0, end: 24 }), frameRate: 25, repeat: -1 });
+    this.anims.create({ key: 'barili_fuoco', frames: this.anims.generateFrameNumbers('barili_animati', { start: 0, end: 24 }), frameRate: 12, repeat: -1 });
 
     [...membri, ...cattivi].forEach(char => {
         animazioni.forEach(anim => {
@@ -114,23 +91,8 @@ function create() {
     pali.push(this.add.image(2000, 540, 'palo1').setDepth(10).setScale(1.5));
     pali.push(this.add.image(3000, 540, 'palo2').setDepth(10).setScale(1.5));
 
-    // Lo inseriamo in stato di RUN fin da subito
+    // Il Furgone parte in corsa!
     furgone = this.add.sprite(960, 700, 'furgone_run').setDepth(3).setScale(3.5).play('furgone_run_anim');
-
-    // Timer per sgommate casuali (spins) durante la corsa!
-    this.time.addEvent({
-        delay: 4000,
-        callback: () => {
-            if (faseVideo === 1 || faseVideo === 4 || faseVideo === 5) {
-                if (Math.random() > 0.4) {
-                    furgone.play('furgone_spins_anim');
-                    // Dopo 1.2 secondi, torna a correre normale
-                    this.time.delayedCall(1200, () => { furgone.play('furgone_run_anim'); });
-                }
-            }
-        },
-        loop: true
-    });
 
     let posizioniBandX = { 'carma': 350, 'ferraz': 600, 'mauri': 850, 'nan': 1100, 'falcon': 1350 };
     membri.forEach(m => {
@@ -168,14 +130,25 @@ function create() {
 
     // --- LA REGIA DEI TEMPI ESATTI ---
 
-    // FASE 2: A piedi, Skyline (20s)
+    // A 18 secondi: Il furgone frena sgommando (SPINS)
+    this.time.delayedCall(18000, () => {
+        furgone.play('furgone_spins_anim');
+        furgone.y = 650; // TRUCCO: Lo alziamo leggermente per compensare l'errore del file PNG
+    });
+
+    // FASE 2: A piedi (20s)
     this.time.delayedCall(20000, () => {
         faseVideo = 2; 
         cielo.setVisible(false); skyline.setVisible(true);
         pali.forEach(p => p.setVisible(false));
 
-        // Il Furgone esce
+        furgone.play('furgone_run_anim'); // Smette di derapare
+        furgone.y = 700; // Torna alla Y corretta
+        
+        // Esce di scena
         this.tweens.add({ targets: furgone, x: -1000, duration: 4000, ease: 'Power2' });
+        
+        // I regaz scendono
         membri.forEach(m => {
             bandSprites[m].setVisible(true).play(`${m}_walk_anim`).y = 700; 
             this.tweens.add({ targets: bandSprites[m], y: 780, duration: 500, ease: 'Bounce.easeOut' });
@@ -199,7 +172,7 @@ function create() {
         this.time.delayedCall(3000, () => iniziaRissa(this));
     });
 
-    // FASE 3 (IL MASSACRO): I nemici soccombono (75s)
+    // IL MASSACRO (75s storditi, 82s sconfitti)
     this.time.delayedCall(75000, () => { statoRissa = 1; }); 
     this.time.delayedCall(82000, () => {
         statoRissa = 2; 
@@ -218,24 +191,42 @@ function create() {
         });
     });
 
-    // FASE 4: Fuga in Furgone verso Skyline (90s)
+    // FASE 4: Ritorno di fiamma e Derapata finale (90s)
     this.time.delayedCall(90000, () => {
         faseVideo = 4;
         rovine.setVisible(false); skyline.setVisible(true);
         
+        // Spariscono i buoni e i prop
         membri.forEach(m => this.tweens.add({ targets: bandSprites[m], alpha: 0, duration: 500 }));
         ostacoli.forEach(o => this.tweens.add({ targets: o, alpha: 0, duration: 500 }));
 
-        // Rientra il bestione
+        // Il bestione rientra a tutta velocità
         furgone.x = -800;
         furgone.setVisible(true);
-        furgone.play('furgone_run_anim'); // Si assicura di rientrare sgommando!
-        this.tweens.add({ targets: furgone, x: 960, duration: 2500, ease: 'Power2' });
+        furgone.play('furgone_run_anim'); 
+        
+        this.tweens.add({ 
+            targets: furgone, 
+            x: 960, 
+            duration: 2500, 
+            ease: 'Power2',
+            onComplete: () => {
+                // A 92.5 secondi arriva al centro e sgomma (SPINS) per caricarli!
+                furgone.play('furgone_spins_anim');
+                furgone.y = 650; // Trucco per compensare il PNG
+                
+                // Dopo 2 secondi di sgommata, riparte a palla
+                this.time.delayedCall(2000, () => {
+                    furgone.play('furgone_run_anim');
+                    furgone.y = 700; // Riposiziona
+                });
+            }
+        });
         
         pali.forEach(p => p.setVisible(true)); 
     });
 
-    // FASE 5: Cielo e chiusura (105s)
+    // FASE 5: Cielo (105s)
     this.time.delayedCall(105000, () => {
         faseVideo = 5;
         skyline.setVisible(false); cielo.setVisible(true);
