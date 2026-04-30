@@ -9,7 +9,7 @@ const game = new Phaser.Game(config);
 
 // Variabili globali
 let cielo, skyline, pavimento;
-let furga;
+let furgone;
 let pali = [], ostacoli = [], nemiciSprites = [];
 let bandSprites = {}; 
 
@@ -30,7 +30,7 @@ function preload() {
 
     // --- CARICAMENTO SPRITESHEET (Tutti griglia 5x5, 25 frame, 1280x1280) ---
     // Furga e Barili ora sono animazioni!
-    this.load.spritesheet('furga_idle', 'assets/furga-idle.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
+    this.load.spritesheet('furgone_idle', 'assets/furgone.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
     this.load.spritesheet('barili_idle', 'assets/barili.png', { frameWidth: 256, frameHeight: 256, endFrame: 24 });
 
     // Personaggi e Nemici
