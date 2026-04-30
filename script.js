@@ -9,7 +9,7 @@ const game = new Phaser.Game(config);
 
 // --- IL BASTONE MAGICO PER I TEST ---
 // Metti TRUE per fare i test super veloci. Metti FALSE quando devi registrare il video reale!
-const MODALITA_TEST = true; 
+const MODALITA_TEST = false; 
 const mTempo = MODALITA_TEST ? 0.1 : 1; // Se in test, tutto avviene 10 volte più veloce
 
 // Variabili globali
